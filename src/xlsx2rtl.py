@@ -16,9 +16,9 @@ def get_port_list(wb,port_indexs) :
     for i in range(0,len(port_indexs)):
         if(wb.iloc[port_indexs[i]]['Field'].lower() != 'reserved') : 
             port_name  = re.sub(r'\[[\s]*\d+[\s\:]*[\s\d]*\]',"",wb.iloc[port_indexs[i]]['Port_Name'])
-            bit_indexs = list(map(int,re.findall(r'\d+',wb.iloc[port_indexs[i]]['Port_Name'])))
-            lsb = min(bit_indexs)
-            msb = max(bit_indexs)
+            bit_indexs = get_bit_range(wb.iloc[port_indexs[i]]['Port_Name'])
+            lsb = bit_indexs['lsb']
+            msb = bit_indexs['msb']
             new_port = True
             for j in range(0,len(port_list)) :
                 if(port_name == port_list[j]['port_name']) :
@@ -29,6 +29,19 @@ def get_port_list(wb,port_indexs) :
             if(new_port == True) :         
                 port_list.append({'port_name' : port_name, 'lsb' : lsb, 'msb': msb})
     return port_list
+
+def get_bit_range(bit_range) :
+
+    bit_indexs = list(map(int,re.findall(r'\d+',bit_range)))
+    num_indexs = len(bit_indexs)
+    if(num_indexs == 1): bit_indexs.append(bit_indexs[0]) # append dummy value to avoid syntax error
+    #assert(num_indexs in [1,2]), "field '" + field_name + "' of register '" + reg_name + "' has invalid Bit_Range!!!"
+    lsb = min(bit_indexs)
+    msb = max(bit_indexs)
+    bit_range_out = {'lsb' : lsb, 'msb': msb}
+
+    return bit_range_out
+
 #-------------------------------------------
 # Main Scripts
 #-------------------------------------------
@@ -134,19 +147,15 @@ def main(argv) :
             assert(re.match(r'^0x[0-9a-fA-F]$',field_rst_value)), "field '" + field_name + "' of register '" + reg_name + "' has invalid Reset_Value!!!"
 
             #extract bit-position
-            bit_indexs = list(map(int,re.findall(r'\d+',bit_range)))
-            num_indexs = len(bit_indexs)
-            if(num_indexs == 1): bit_indexs.append(bit_indexs[0]) # append dummy value to avoid syntax error
-            assert(num_indexs in [1,2] and bit_indexs[0] >= bit_indexs[1]), "field '" + field_name + "' of register '" + reg_name + "' has invalid Bit_Range!!!"
-
-            if(field_name.lower() == 'reserved' and max(bit_indexs) == data_width-1 and acc_type == 'RO') :
+            bit_indexs = get_bit_range(bit_range)
+            if(field_name.lower() == 'reserved' and bit_indexs['msb'] == data_width-1 and acc_type == 'RO') :
                 pass
             else : 
                 # calulate register reset value
                 int_field_rst_value = int(field_rst_value,0)
-                bit_width = abs(bit_indexs[0] - bit_indexs[1]) + 1
+                bit_width = (bit_indexs['msb'] - bit_indexs['lsb']) + 1
                 bit_mask  = (2**data_width-1) >> (data_width - bit_width)
-                reg_rst_value += (int_field_rst_value & bit_mask) << min(bit_indexs)
+                reg_rst_value += (int_field_rst_value & bit_mask) << bit_indexs['lsb']
                 reg_bit_width += bit_width
                 #print("reg_rst_value \t= " + hex(reg_rst_value) + "\t\t;bit_mask \t= " + hex(bit_mask))
 
@@ -159,6 +168,7 @@ def main(argv) :
             #----------------------------
             reg_reset_pattern = r'.*\${__REG_VAR__}.*<=.*\${__REG_RESET_VALUE__}.*[\r\n]'
             reg_write_pattern = r'.*\${__REG_VAR__}.*<=.*[\r\n]'
+            reg_wstrb_pattern = r'^[\s]*__STRB_START__[\s\r\n]*[\s\S]*?__STRB_END__.*[\r\n]'
             reg_read_pattern  = r'.*=.*\${__REG_VAR__}.*[\r\n]'
             #find out reset-patern, then replace it
             rtl_rst_pat = re.findall(reg_reset_pattern,rtl_code)
@@ -169,9 +179,11 @@ def main(argv) :
                 rtl_code = rtl_code.replace(rtl_rst_pat[0],rtl_rst_code)
 
             #find out write-patern, then replace it
-            rtl_wr_pat  = re.findall(reg_write_pattern,rtl_code)
+            rtl_wstrb_pat  = re.findall(reg_wstrb_pattern,rtl_code,re.MULTILINE)
+            rtl_wr_pat     = re.findall(reg_write_pattern,rtl_code)
             if (len(rtl_wr_pat) == 1 ) :
                 rtl_wr_code = ""
+                rtl_wstrb_code = ""
                 for j in range(0,len(reg_fields)): # loop for-each row
                     field_name = reg_fields.iloc[j]['Field'      ]
                     bit_range  = reg_fields.iloc[j]['Bit_Range'  ]
@@ -179,18 +191,44 @@ def main(argv) :
                     port_name  = reg_fields.iloc[j]['Port_Name'  ]
                     if(field_name.lower() != 'reserved') :
                         if(re.match(r'RW',acc_type) or re.match(r'WO',acc_type)):
-                            rtl_wr_code_tmp = rtl_wr_pat[0]
-                            rtl_wr_code_tmp = rtl_wr_code_tmp.replace("${__REG_VAR__}",cat_str("var",reg_name.lower()))
-                            rtl_wr_code_tmp = rtl_wr_code_tmp.replace("[${__REG_RANGE__}]",bit_range)
-                            rtl_wr_code_tmp = rtl_wr_code_tmp.replace("${__FIELD_NAME__}",field_name)
-                            rtl_wr_code += rtl_wr_code_tmp
+                            if(len(rtl_wstrb_pat) == 1) : #Support Write Stroble
+                                rtl_wstrb_code_tmp = re.sub(r'.*__STRB_START__.*[\r\n]|.*__STRB_END__.*[\r\n]',"",rtl_wstrb_pat[0]) #remove __LOOP_START__ and __LOOP_END__
+                                bit_indexs = get_bit_range(bit_range)
+                                lsb_strb = int(bit_indexs['lsb']/8)
+                                msb_strb = int(bit_indexs['msb']/8)
+                                if(lsb_strb != msb_strb) :
+                                    for strb_index in range(lsb_strb,msb_strb):
+                                        rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("${__STRB_INDEX__}",str(strb_index))
+                                        rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("${__REG_VAR__}",cat_str("var",reg_name.lower()))
+
+                                        lsb = strb_index*8
+                                        msb = (strb_index+1)*8-1
+                                        bit_range_str = "["+str(max(lsb,bit_indexs['lsb']))+":"+str(min(msb,bit_indexs['msb']))+"]"
+                                        rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("[${__REG_RANGE__}]",bit_range_str)
+                                        rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("${__FIELD_NAME__}",field_name)
+                                        rtl_wstrb_code    += rtl_wstrb_code_tmp
+                                else :
+                                    rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("${__STRB_INDEX__}",str(msb_strb))
+                                    rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("${__REG_VAR__}",cat_str("var",reg_name.lower()))
+                                    rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("[${__REG_RANGE__}]",bit_range)
+                                    rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("${__FIELD_NAME__}",field_name)
+                                    rtl_wstrb_code    += rtl_wstrb_code_tmp
+                            else :  
+                                rtl_wr_code_tmp = rtl_wr_pat[0]
+                                rtl_wr_code_tmp = rtl_wr_code_tmp.replace("${__REG_VAR__}",cat_str("var",reg_name.lower()))
+                                rtl_wr_code_tmp = rtl_wr_code_tmp.replace("[${__REG_RANGE__}]",bit_range)
+                                rtl_wr_code_tmp = rtl_wr_code_tmp.replace("${__FIELD_NAME__}",field_name)
+                                rtl_wr_code += rtl_wr_code_tmp
 
                             # generate CSR assign blocks
                             rtl_asgn_pat = re.findall(r'.*__CSR_ASSIGN_BLK__.*[\r\n]',vcode)
                             rtl_asgn_str = "assign " + port_name + " = " + cat_str("var",reg_name.lower()) + bit_range + ";"
                             rtl_asgn_code = rtl_asgn_pat[0].replace("__CSR_ASSIGN_BLK__",rtl_asgn_str)
                             cfg_assign_blk += rtl_asgn_code
-                rtl_code = rtl_code.replace(rtl_wr_pat[0],rtl_wr_code)
+                if(len(rtl_wstrb_pat) == 1) : #Support Write Stroble
+                    rtl_code = rtl_code.replace(rtl_wstrb_pat[0],rtl_wstrb_code)
+                else:
+                    rtl_code = rtl_code.replace(rtl_wr_pat[0],rtl_wr_code)
 
             #find out read-pattern, then replace it
             rtl_rd_pat = re.findall(reg_read_pattern ,rtl_code)
@@ -253,6 +291,7 @@ def main(argv) :
     vcode = vcode.replace("${__MODULE_NAME__}"     ,cat_str(dsgn_name.lower(),"csr")  )
     vcode = vcode.replace("${__DATA_WIDTH_VAL__}"  ,str(data_width)                 ,1)
     vcode = vcode.replace("${__ADDR_WIDTH_VAL__}"  ,str(addr_width)                 ,1)
+    vcode = vcode.replace("${__STRB_WIDTH_VAL__}"  ,str(int(data_width/8))          ,1)
     vcode = re.sub(r'.*__REG_DECLARE_BLK__.*[\r\n]',reg_declare_blk,vcode)
     vcode = re.sub(r'.*__CSR_ASSIGN_BLK__.*[\r\n]', cfg_assign_blk + sts_assign_blk,vcode)
     vcode = re.sub(r'.*__CSR_PORT_LIST__.*[\r\n]',rtl_port_list_code,vcode)
