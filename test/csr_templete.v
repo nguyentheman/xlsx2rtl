@@ -79,7 +79,6 @@ module ${__MODULE_NAME__} (
                 rdata_int[${__REG_RANGE__}] = ${__REG_VAR__}[${__REG_RANGE__}]; //${__FIELD_NAME__}
             end
             __LOOP_END__
-
             default: begin
                 rdata_int[DATA_WIDTH-1:0] = {DATA_WIDTH{1'b0}};
             end

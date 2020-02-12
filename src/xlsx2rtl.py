@@ -108,9 +108,11 @@ def main(argv) :
     f_csr_temp.close();
 
     # get RTL code patterns
-    REGEX_TO_DETECT_MULTI_LINE_REG_PATTERN = r'[\s]*__LOOP_START__[\s\r\n]*[\s\S]*?__LOOP_END__[\s\r\n]*'
-    reg_loop_patterns =  re.findall(REGEX_TO_DETECT_MULTI_LINE_REG_PATTERN,vcode)
-
+    REGEX_TO_DETECT_MULTI_LINE_REG_PATTERN = r'^[\s]*__LOOP_START__[\s\r\n]*[\s\S]*?__LOOP_END__.*[\r\n]'
+    reg_loop_patterns =  re.findall(REGEX_TO_DETECT_MULTI_LINE_REG_PATTERN,vcode,re.MULTILINE)
+    print(reg_loop_patterns[0])
+    print(reg_loop_patterns[1])
+    print(reg_loop_patterns[2])
     reg_declare_blk = ""
     cfg_assign_blk  = ""
     sts_assign_blk  = ""
