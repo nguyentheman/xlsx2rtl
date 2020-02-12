@@ -21,10 +21,16 @@ xlsx2rtl.py -i <excel input file> -v <templete of verilog CSR code> -o <output d
 
 ### Examples
 
-An example of "test.xlsx" and "csr_templete.v" is availabled on [test](https://github.com/nguyentheman/xlsx2rtl/tree/master/test). User can execute the below command for test.
+The example of "excel input file" and "verilog templete files" are availabled on [test](https://github.com/nguyentheman/xlsx2rtl/tree/master/test). User can execute the below command for test.
 
+For generating the RTL code of CSR without "write stroble" feature
 ``` 
 xlsx2rtl.py -i ./test/test.xlsx -v ./test/csr_templete.v -o ./test/
+``` 
+
+For generating the RTL code of CSR with "write stroble" feature
+```
+xlsx2rtl.py -i ./test/test.xlsx -v ./test/csr_wsrtb_templete.v -o ./test/
 ```
 
 ### Userguide
