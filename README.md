@@ -21,7 +21,7 @@ xlsx2rtl.py -i <excel input file> -v <templete of verilog CSR code> -o <output d
 
 ### Examples
 
-An example of "test.xlsx" and "csr_templete.v" is availabled on [test](https://github.com/nguyentheman/xlsx2rtl/tree/master/test). User can execute the command below for test.
+An example of "test.xlsx" and "csr_templete.v" is availabled on [test](https://github.com/nguyentheman/xlsx2rtl/tree/master/test). User can execute the below command for test.
 
 ``` 
 xlsx2rtl.py -i ./test/test.xlsx -v ./test/csr_templete.v -o ./test/
@@ -29,7 +29,14 @@ xlsx2rtl.py -i ./test/test.xlsx -v ./test/csr_templete.v -o ./test/
 
 ### Userguide
 
+#### Create register input file
+
 T.B.D
+
+#### Create CSR templete file
+
+T.B.D
+
 
 ## License
 
