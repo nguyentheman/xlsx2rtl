@@ -50,8 +50,8 @@ The xlsx2rtl script simply replaces the "code sections" and "variables" in veril
 | \_\_CSR_PORT_DECLARE\_\_  | the definition of configuration and status ports
 | \_\_REG_DECLARE_BLK\_\_   | the definition of internal registers. The name of registers is get from "Register_Name" field in excel file
 | \_\_REG_ASSIGN_BLK\_\_    | the assigment between Configuration and Status ports with register's fields.
-| \_\_LOOP_START\_\_ \<code templete\> __LOOP_END__ | repeat the \<code templete\> for all registers
-| \_\_STRB_START\_\_ \<code templete\> __STRB_END__ | insert write strobe following \<code templete\>  
+| \_\_LOOP_START\_\_ \<code templete\> \_\_LOOP_END\_\_ | repeat the \<code templete\> for all registers
+| \_\_STRB_START\_\_ \<code templete\> \_\_STRB_END\_\_ | insert write strobe following \<code templete\>  
 
 #### Variables
 
