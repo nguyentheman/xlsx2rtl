@@ -49,8 +49,8 @@ The xlsx2rtl script simply replaces the "code sections" and "variables" in veril
 - __CSR_PORT_DECLARE__  : the definition of configuration and status ports
 - __REG_DECLARE_BLK__   : the definition of internal registers. The name of registers is get from "Register_Name" field in excel file
 - __REG_ASSIGN_BLK__    : the assigment between Configuration and Status ports with register's fields.
-- __LOOP_START__ <code templete> __LOOP_END__ : repeat the <code templete> for all registers
-- __STRB_START__ <code templete> __STRB_END__ : insert write strobe following <code templete>  
+- __LOOP_START__ \<code templete\> __LOOP_END__ : repeat the \<code templete\> for all registers
+- __STRB_START__ \<code templete\> __STRB_END__ : insert write strobe following \<code templete\>  
 
 #### Variables
 
