@@ -43,9 +43,9 @@ module uart_csr (
     input   wire                    cs    ;
 
     //Configuration & Status
-    wire [7:0] portA;
-    wire [6:0] portC;
-    wire [7:5] portB;
+    output [7:0] portA;
+    output [6:0] portC;
+    input [7:0] portB;
 
     //Internal Registers
     reg [10:0] var_reg1;
@@ -94,6 +94,7 @@ module uart_csr (
         case(addr[ADDR_WIDTH-1:0])
             `ADDR_REG1 : begin
                 rdata_int[ 3: 0] = var_reg1[ 3: 0]; //field1
+                rdata_int[ 8: 4] = var_reg1[ 8: 4]; //field2
                 rdata_int[10: 9] = var_reg1[10: 9]; //field3
             end
             `ADDR_REG2 : begin
@@ -113,6 +114,7 @@ module uart_csr (
     assign portA[ 7: 4] = var_reg2[ 3: 0];
     assign portC[5: 0] = var_reg2[10: 5];
     assign portC[6   ] = var_reg2[11   ];
+    assign var_reg1[ 8: 4] = portB[ 4: 0];
     assign var_reg1[10: 9] = portB[ 6: 5];
     assign var_reg2[ 4   ] = portB[7   ];
 endmodule : uart_csr

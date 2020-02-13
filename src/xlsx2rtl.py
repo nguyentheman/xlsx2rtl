@@ -278,12 +278,12 @@ def main(argv) :
     rtl_port_list_code = ""
     rtl_port_dclr_code = ""
     for i in range(0,len(cfg_port_list)):
-        port_dclr_str = "wire [" + str(cfg_port_list[i]['msb']) + ":" + str(cfg_port_list[i]['lsb']) + "] " + cfg_port_list[i]['port_name'] + ";";
+        port_dclr_str = "output [" + str(cfg_port_list[i]['msb']) + ":" + str(cfg_port_list[i]['lsb']) + "] " + cfg_port_list[i]['port_name'] + ";";
         rtl_port_list_code += rtl_port_list_pat[0].replace("__CSR_PORT_LIST__"   ,cfg_port_list[i]['port_name'])
         rtl_port_dclr_code += rtl_port_dclr_pat[0].replace("__CSR_PORT_DECLARE__",port_dclr_str)
 
     for i in range(0,len(sts_port_list)):
-        port_dclr_str = "wire [" + str(sts_port_list[i]['msb']) + ":" + str(sts_port_list[i]['lsb']) + "] " + sts_port_list[i]['port_name'] + ";";
+        port_dclr_str = "input [" + str(sts_port_list[i]['msb']) + ":" + str(sts_port_list[i]['lsb']) + "] " + sts_port_list[i]['port_name'] + ";";
         rtl_port_list_code += rtl_port_list_pat[0].replace("__CSR_PORT_LIST__"   ,sts_port_list[i]['port_name'])
         rtl_port_dclr_code += rtl_port_dclr_pat[0].replace("__CSR_PORT_DECLARE__",port_dclr_str)
 
