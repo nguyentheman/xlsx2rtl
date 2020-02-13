@@ -46,25 +46,25 @@ The xlsx2rtl script simply replaces the "code sections" and "variables" in veril
 #### Code sections
 | Code section | Meanning |
 | ------------- | ------------- |
-| \__CSR_PORT_LIST__     | list of Configuration and Status ports. It is extracted from the "Port_Name" column in excel file
-| \__CSR_PORT_DECLARE__  | the definition of configuration and status ports
-| \__REG_DECLARE_BLK__   | the definition of internal registers. The name of registers is get from "Register_Name" field in excel file
-| \__REG_ASSIGN_BLK__    | the assigment between Configuration and Status ports with register's fields.
-| \__LOOP_START__ \<code templete\> __LOOP_END__ | repeat the \<code templete\> for all registers
-| \__STRB_START__ \<code templete\> __STRB_END__ | insert write strobe following \<code templete\>  
+| \_\_CSR_PORT_LIST\_\_     | list of Configuration and Status ports. It is extracted from the "Port_Name" column in excel file
+| \_\_CSR_PORT_DECLARE\_\_  | the definition of configuration and status ports
+| \_\_REG_DECLARE_BLK\_\_   | the definition of internal registers. The name of registers is get from "Register_Name" field in excel file
+| \_\_REG_ASSIGN_BLK\_\_    | the assigment between Configuration and Status ports with register's fields.
+| \_\_LOOP_START\_\_ \<code templete\> __LOOP_END__ | repeat the \<code templete\> for all registers
+| \_\_STRB_START\_\_ \<code templete\> __STRB_END__ | insert write strobe following \<code templete\>  
 
 #### Variables
 
 | Variable | Meanning |
 | ------------- | ------------- |
-| ${\__DATA_WIDTH_VAL__} | bit-width of write data and read data
-| ${\__ADDR_WIDTH_VAL__} | bit-width of register's address
-| ${\__STRB_WIDTH_VAL__} | bit-width of write_strobe input, this value is calculated from ${__DATA_WIDTH_VAL__} automatically.
-| ${\__REG_VAR__} | internal register variable, it is defined at __REG_DECLARE_BLK__ code section
-| ${\__REG_ADDR__} | register's address, it is extracted from the "Register Address" field in excel file
-| ${\__REG_RANGE__} | bit-part selection of register read/write opreation. This value is calculated by script automatically. 
-| ${\__FIELD_NAME__} | the name of register's field
-| ${\__STRB_INDEX__} | the write_stroble bit selection
+| ${\__DATA_WIDTH_VAL\_\_} | bit-width of write data and read data
+| ${\__ADDR_WIDTH_VAL\_\_} | bit-width of register's address
+| ${\__STRB_WIDTH_VAL\_\_} | bit-width of write_strobe input, this value is calculated from ${__DATA_WIDTH_VAL__} automatically.
+| ${\__REG_VAR\_\_} | internal register variable, it is defined at __REG_DECLARE_BLK__ code section
+| ${\__REG_ADDR\_\_} | register's address, it is extracted from the "Register Address" field in excel file
+| ${\__REG_RANGE\_\_} | bit-part selection of register read/write opreation. This value is calculated by script automatically. 
+| ${\__FIELD_NAME\_\_} | the name of register's field
+| ${\__STRB_INDEX\_\_} | the write_stroble bit selection
 
 ## License
 
