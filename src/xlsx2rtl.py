@@ -1,52 +1,101 @@
+from docx import Document 
 import sys, getopt
 import pandas as pd
 import re
 
-#-------------------------------------------
-# Functions
-#-------------------------------------------
-def cat_str(*tuple_strs):    
-    ostr = tuple_strs[0]
-    for i in range(1,len(tuple_strs)):
-        ostr = ostr + "_" + tuple_strs[i];
-    return ostr
+class xlsx_reader:
 
-def get_port_list(wb,port_indexs) :
-    port_list = list()
-    for i in range(0,len(port_indexs)):
-        if(wb.iloc[port_indexs[i]]['Field'].lower() != 'reserved') : 
-            port_name  = re.sub(r'\[[\s]*\d+[\s\:]*[\s\d]*\]',"",wb.iloc[port_indexs[i]]['Port_Name'])
-            bit_indexs = get_bit_range(wb.iloc[port_indexs[i]]['Port_Name'])
-            lsb = bit_indexs['lsb']
-            msb = bit_indexs['msb']
-            new_port = True
-            for j in range(0,len(port_list)) :
-                if(port_name == port_list[j]['port_name']) :
-                    new_port = False
-                    port_list[j]['lsb'] = min(lsb,port_list[j]['lsb'])
-                    port_list[j]['msb'] = max(msb,port_list[j]['msb'])
-                    break;
-            if(new_port == True) :         
-                port_list.append({'port_name' : port_name, 'lsb' : lsb, 'msb': msb})
-    return port_list
+    # Parameters
+    USED_COLS = ['Type','Field','Bit_Range', 'Reset_Value','Access','Port_Name']
 
-def get_bit_range(bit_range) :
+    def __init__(self,input_file,input_sheet) :
+        self.xlsx_file  = input_file
+        self.xlsx_sheet = input_sheet
+        self.wb = pd.read_excel(io=self.xlsx_file,sheet_name=self.xlsx_read,usecols=USED_COLS)
+        self.__get_index_of_registers(self)
 
-    bit_indexs = list(map(int,re.findall(r'\d+',bit_range)))
-    num_indexs = len(bit_indexs)
-    if(num_indexs == 1): bit_indexs.append(bit_indexs[0]) # append dummy value to avoid syntax error
-    #assert(num_indexs in [1,2]), "field '" + field_name + "' of register '" + reg_name + "' has invalid Bit_Range!!!"
-    lsb = min(bit_indexs)
-    msb = max(bit_indexs)
-    bit_range_out = {'lsb' : lsb, 'msb': msb}
+    def lint_check(self) :
+        #TODO: add xlsx_input validation here
+        pass
 
-    return bit_range_out
+    def get_design_params(self) :
+        param_idx  = self.wb[self.wb['Type'].lower() == 'parameter'].index.values
+        self.dsgn_name  = self.wb.iloc[param_idx[0]]['Field']
+        self.addr_width = self.wb.iloc[param_idx[0]]['Bit_Range']
+        self.data_width = self.wb.iloc[param_idx[0]]['Reset_Value']
+        self.strb_width = int(data_width/8)
 
-#-------------------------------------------
+    def get_register_info(self,start_row,end_row) :
+        reg_name   = self.wb.iloc[start_row]['Field']
+        reg_fields = self.wb.iloc[start_row +1 : end_row] 
+
+        reg_reset_value = 0x0
+        reg_bit_width   = 0x0
+        reg_field_lst   = list()
+        for i in range(0,len(reg_fields)) :
+            field_name      = reg_fields.iloc[i]['Field']
+            field_bit_range = reg_fields.iloc[i]['Bit_Range']
+            field_acc_type  = reg_fields.iloc[i]['Access']
+            field_rst_value = reg_fields.iloc[i]['Reset_Value']
+            field_port_name = reg_fields.iloc[i]['Port_Name']
+
+            # Extract register fields 
+            field_bit_indexs = self.__get_bit_indexs(self,field_bit_range)
+            port_bit_indexs  = self.__get_bit_indexs(self,field_port_name)
+            reg_field_lst.append({
+                 'name'      : field_name
+                ,'bit_range' : field_bit_range
+                ,'access'    : field_acc_type
+                ,'lsb'       : field_bit_indexs['lsb'] 
+                ,'msb'       : field_bit_indexs['msb'] 
+                ,'port_name' : re.sub(r'\[[\s]*\d+[\s\:]*[\s\d]*\]',"",field_port_name)
+                ,'port_lsb'  : port_bit_indexs['lsb']
+                ,'port_msb'  : port_bit_indexs['msb']
+            })
+
+            # Calculate Reset_Value & Bit_Width
+            if(field_name.lower() == 'reserved') :
+                pass
+            else :
+                int_field_rst_value = int(field_rst_value,0)
+                field_bit_width = (field_bit_indexs['msb'] - field_bit_indexs['lsb']) + 1
+                bit_mask = (2**self.data_width-1) >> (self.data_width - field_bit_width)
+
+                reg_reset_value += (int_field_rst_value & bit_mask) << field_bit_indexs['lsb']
+                reg_bit_width += field_bit_width;
+
+        reg_info = {
+             'name'        : reg_name
+            ,'bit_width'   : reg_bit_width
+            ,'reset_value' : reg_reset_value
+            ,'fields'      : reg_field_lst
+        }
+    #---------------------------------------------
+    # Private functions
+    #---------------------------------------------
+    def __get_bit_indexs(self,bit_range) :
+        bit_indexs = list(map(int,re.findall(r'\d+',bit_range)))
+        num_indexs = len(bit_indexs)
+        if(num_indexs == 1): 
+            bit_indexs.append(bit_indexs[0]) # append dummy value to avoid syntax error
+        lsb = min(bit_indexs)
+        msb = max(bit_indexs)
+        index_out = {'lsb' : lsb, 'msb': msb}
+        return index_out
+
+    def __get_index_of_registers(self) :
+        self.reg_start_rows = self.wb[self.wb['Type'] == 'register'].index.values
+        self.reg_end_rows   = self.wb[self.wb['Type'] == 'comment'].index.values
+        assert(len(self.reg_start_rows) == len(self.reg_end_rows)) , "Missing 'register' or 'comment' field !!!!"
+
+#----------------------------------------
 # Main Scripts
-#-------------------------------------------
+#----------------------------------------
+def print_help() :
+    print ("xlsx2rtl.py -i <excel-based register input file -v <verilog templete file> -o <output dir>")
 
 def main(argv) :
+
     # Terminal Arguments
     XLSX_IN   = ""
     CSR_TEMP  = ""
@@ -54,11 +103,11 @@ def main(argv) :
     try :
         opts,args = getopt.getopt(argv,"hi:v:o:",["ifile=","vfile=","odir="])
     except getopt.GetoptError:
-        print ("xlsx2rtl.py -i <excel-based register input file -v <verilog templete file> -o <output dir>")
+        print_help()
         sys.exit(2)
     for opt, arg in opts:
         if(opt == '-h') :
-            print ("xlsx2rtl.py -i <excel-based register input file -v <verilog templete file> -o <output dir>")
+            print_help()
             sys.exit()
         elif opt in ("-i","--ifile"):
             XLSX_IN = arg
@@ -66,245 +115,15 @@ def main(argv) :
             CSR_TEMP = arg
         elif opt in ("-o","--odir"):
             OUT_DIR = arg
-    #load workbook
-    filepath = XLSX_IN
-    wb = pd.read_excel(io=filepath,sheet_name="register_set",usecols=['Type','Field','Bit_Range', 'Reset_Value','Access','Port_Name'])
 
-    #-------------------------------------------------------------------------------
-    # Get design parameter
-    #-------------------------------------------------------------------------------
+    csr = xlsx_reader(XLSX_IN,"register_set")
 
-    # get design parameter
-    param_idx = wb[wb['Type'] =='parameter'].index.values
-    dsgn_name  = wb.iloc[param_idx[0]]['Field'      ]
-    addr_width = wb.iloc[param_idx[0]]['Bit_Range'  ]
-    data_width = wb.iloc[param_idx[0]]['Reset_Value']
+    # perform lint check for excel file
+    csr.lint_check()
 
-    # input validation
-    assert (len(param_idx) == 1), "Invalid parameter block!!!"
-    assert (wb.isna().iloc[param_idx[0]]['Field'      ] == False and isinstance(dsgn_name,str) == True), "DESIGN_NAME must be input as string !!!"
-    assert (wb.isna().iloc[param_idx[0]]['Bit_Range'  ] == False and isinstance(addr_width,int)== True), "ADDR_WIDTH value must be integer !!!"
-    assert (wb.isna().iloc[param_idx[0]]['Reset_Value'] == False and isinstance(data_width,int)== True), "DATA_WIDTH value must be integer !!!"
+    # get design paramter
+    csr.get_design_params()
+    print("dsgn_name : " + csr.dsgn_name  + "\n")
+    print("addr_width: " + csr.addr_width + "\n")
+    print("data_width: " + csr.data_width + "\n")
 
-    # Program paramters
-    pf_csr_vh   = OUT_DIR + dsgn_name.lower() + "_csr.vh"
-    pf_csr_v    = OUT_DIR + dsgn_name.lower() + "_csr.v"
-    #-------------------------------------------------------------------------------
-    # Create csr.vh
-    #-------------------------------------------------------------------------------
-    #select register rows
-    regs_start = wb[wb['Type'] == 'register'].index.values
-    regs_end   = wb[wb['Type'] == 'comment'].index.values
-    assert(len(regs_start) == len(regs_end)) , "Missing 'register' or 'comment' field !!!!"
-
-    # Create csr.vh
-    f_csr_vh = open(pf_csr_vh,"w")
-    wstr = "`ifndef " + "__" + dsgn_name.upper() + "_CSR_" + "VH__\n"
-    wstr += "`define " + "__" + dsgn_name.upper() + "_CSR_" + "VH__\n\n\n"
-    f_csr_vh.write(wstr)
-    for i in range(0,len(regs_start)) :
-        wstr = "`define "
-        wstr = wstr + cat_str("ADDR",wb.iloc[regs_start[i]]['Field'].upper()) + " " 
-        wstr = wstr + wb.iloc[regs_start[i]]['Bit_Range'].replace('0x',str(addr_width)+'\'h') + "\n"
-        f_csr_vh.write(wstr)
-    f_csr_vh.write("\n\n`endif\n")
-    f_csr_vh.close()
-
-    #-------------------------------------------------------------------------------
-    # Create csr.v
-    # FIXME: below solution will consume huge ram when sovling a big register set
-    #-------------------------------------------------------------------------------
-
-    # open templete file for edit
-    f_csr_temp = open(CSR_TEMP,"rt");
-    vcode = f_csr_temp.read();
-    f_csr_temp.close();
-
-    # get RTL code patterns
-    REGEX_TO_DETECT_MULTI_LINE_REG_PATTERN = r'^[\s]*__LOOP_START__[\s\r\n]*[\s\S]*?__LOOP_END__.*[\r\n]'
-    reg_loop_patterns =  re.findall(REGEX_TO_DETECT_MULTI_LINE_REG_PATTERN,vcode,re.MULTILINE)
-
-    reg_declare_blk = ""
-    cfg_assign_blk  = ""
-    sts_assign_blk  = ""
-    rtl_insert_lists = [""]*len(reg_loop_patterns)
-    for i in range(0,len(regs_start)) :
-        reg_name        = wb.iloc[regs_start[i]]['Field']
-        reg_fields      = wb.iloc[regs_start[i]+1:regs_end[i]]
-
-        # calculate register's reset value and register's bit-widht
-        reg_rst_value   = 0x0;
-        reg_bit_width   = 0x0;
-        for j in range(0,len(reg_fields)): # loop for-each row
-            field_name      = reg_fields.iloc[j]['Field'      ]
-            bit_range       = reg_fields.iloc[j]['Bit_Range'  ]
-            acc_type        = reg_fields.iloc[j]['Access'     ]
-            field_rst_value = reg_fields.iloc[j]['Reset_Value'] 
-
-            # validate register 's field inputs
-            assert(reg_fields.iloc[j]['Type'] == 'field'), "register '" + reg_name + "' has invalid format!!!"
-            assert(acc_type in {'RW','RO','WO'}), "field '" + field_name + "' of register '" + reg_name + "' has invalid Access type!!!"
-            assert(re.match(r'^0x[0-9a-fA-F]$',field_rst_value)), "field '" + field_name + "' of register '" + reg_name + "' has invalid Reset_Value!!!"
-
-            #extract bit-position
-            bit_indexs = get_bit_range(bit_range)
-            if(field_name.lower() == 'reserved' and bit_indexs['msb'] == data_width-1 and acc_type == 'RO') :
-                pass
-            else : 
-                # calulate register reset value
-                int_field_rst_value = int(field_rst_value,0)
-                bit_width = (bit_indexs['msb'] - bit_indexs['lsb']) + 1
-                bit_mask  = (2**data_width-1) >> (data_width - bit_width)
-                reg_rst_value += (int_field_rst_value & bit_mask) << bit_indexs['lsb']
-                reg_bit_width += bit_width
-                #print("reg_rst_value \t= " + hex(reg_rst_value) + "\t\t;bit_mask \t= " + hex(bit_mask))
-
-        #generate RTL code
-        for k in range(0,len(reg_loop_patterns)) :
-            rtl_pat = reg_loop_patterns[k] #get pattern of the RTL code
-            rtl_code = re.sub(r'.*__LOOP_START__.*[\r\n]|.*__LOOP_END__.*[\r\n]',"",rtl_pat) #remove __LOOP_START__ and __LOOP_END__
-            #----------------------------
-            # Generate RTL code
-            #----------------------------
-            reg_reset_pattern = r'.*\${__REG_VAR__}.*<=.*\${__REG_RESET_VALUE__}.*[\r\n]'
-            reg_write_pattern = r'.*\${__REG_VAR__}.*<=.*[\r\n]'
-            reg_wstrb_pattern = r'^[\s]*__STRB_START__[\s\r\n]*[\s\S]*?__STRB_END__.*[\r\n]'
-            reg_read_pattern  = r'.*=.*\${__REG_VAR__}.*[\r\n]'
-            #find out reset-patern, then replace it
-            rtl_rst_pat = re.findall(reg_reset_pattern,rtl_code)
-            if (len(rtl_rst_pat) == 1 ) :
-                rtl_rst_code = rtl_rst_pat[0]
-                rtl_rst_code = rtl_rst_code.replace("${__REG_RESET_VALUE__}",hex(reg_rst_value).replace("0x",str(reg_bit_width)+"'h"))
-                rtl_rst_code = rtl_rst_code.replace("${__REG_VAR__}",cat_str("var",reg_name.lower()))
-                rtl_code = rtl_code.replace(rtl_rst_pat[0],rtl_rst_code)
-
-            #find out write-patern, then replace it
-            rtl_wstrb_pat  = re.findall(reg_wstrb_pattern,rtl_code,re.MULTILINE)
-            rtl_wr_pat     = re.findall(reg_write_pattern,rtl_code)
-            if (len(rtl_wr_pat) == 1 ) :
-                rtl_wr_code = ""
-                rtl_wstrb_code = ""
-                for j in range(0,len(reg_fields)): # loop for-each row
-                    field_name = reg_fields.iloc[j]['Field'      ]
-                    bit_range  = reg_fields.iloc[j]['Bit_Range'  ]
-                    acc_type   = reg_fields.iloc[j]['Access'     ]
-                    port_name  = reg_fields.iloc[j]['Port_Name'  ]
-                    if(field_name.lower() != 'reserved') :
-                        if(re.match(r'RW',acc_type) or re.match(r'WO',acc_type)):
-                            if(len(rtl_wstrb_pat) == 1) : #Support Write Stroble
-                                rtl_wstrb_code_tmp = re.sub(r'.*__STRB_START__.*[\r\n]|.*__STRB_END__.*[\r\n]',"",rtl_wstrb_pat[0]) #remove __LOOP_START__ and __LOOP_END__
-                                bit_indexs = get_bit_range(bit_range)
-                                lsb_strb = int(bit_indexs['lsb']/8)
-                                msb_strb = int(bit_indexs['msb']/8)
-                                if(lsb_strb != msb_strb) :
-                                    for strb_index in range(lsb_strb,msb_strb):
-                                        rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("${__STRB_INDEX__}",str(strb_index))
-                                        rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("${__REG_VAR__}",cat_str("var",reg_name.lower()))
-
-                                        lsb = strb_index*8
-                                        msb = (strb_index+1)*8-1
-                                        bit_range_str = "["+str(max(lsb,bit_indexs['lsb']))+":"+str(min(msb,bit_indexs['msb']))+"]"
-                                        rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("[${__REG_RANGE__}]",bit_range_str)
-                                        rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("${__FIELD_NAME__}",field_name)
-                                        rtl_wstrb_code    += rtl_wstrb_code_tmp
-                                else :
-                                    rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("${__STRB_INDEX__}",str(msb_strb))
-                                    rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("${__REG_VAR__}",cat_str("var",reg_name.lower()))
-                                    rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("[${__REG_RANGE__}]",bit_range)
-                                    rtl_wstrb_code_tmp = rtl_wstrb_code_tmp.replace("${__FIELD_NAME__}",field_name)
-                                    rtl_wstrb_code    += rtl_wstrb_code_tmp
-                            else :  
-                                rtl_wr_code_tmp = rtl_wr_pat[0]
-                                rtl_wr_code_tmp = rtl_wr_code_tmp.replace("${__REG_VAR__}",cat_str("var",reg_name.lower()))
-                                rtl_wr_code_tmp = rtl_wr_code_tmp.replace("[${__REG_RANGE__}]",bit_range)
-                                rtl_wr_code_tmp = rtl_wr_code_tmp.replace("${__FIELD_NAME__}",field_name)
-                                rtl_wr_code += rtl_wr_code_tmp
-
-                            # generate CSR assign blocks
-                            rtl_asgn_pat = re.findall(r'.*__CSR_ASSIGN_BLK__.*[\r\n]',vcode)
-                            rtl_asgn_str = "assign " + port_name + " = " + cat_str("var",reg_name.lower()) + bit_range + ";"
-                            rtl_asgn_code = rtl_asgn_pat[0].replace("__CSR_ASSIGN_BLK__",rtl_asgn_str)
-                            cfg_assign_blk += rtl_asgn_code
-                if(len(rtl_wstrb_pat) == 1) : #Support Write Stroble
-                    rtl_code = rtl_code.replace(rtl_wstrb_pat[0],rtl_wstrb_code)
-                else:
-                    rtl_code = rtl_code.replace(rtl_wr_pat[0],rtl_wr_code)
-
-            #find out read-pattern, then replace it
-            rtl_rd_pat = re.findall(reg_read_pattern ,rtl_code)
-            if (len(rtl_rd_pat) == 1 ) :
-                rtl_rd_code = ""
-                for j in range(0,len(reg_fields)): # loop for-each row
-                    field_name = reg_fields.iloc[j]['Field'      ]
-                    bit_range  = reg_fields.iloc[j]['Bit_Range'  ]
-                    acc_type   = reg_fields.iloc[j]['Access'     ]
-                    port_name  = reg_fields.iloc[j]['Port_Name'  ]
-                    if(field_name.lower() != 'reserved') :
-                        if(re.match(r'RW',acc_type) or re.match(r'RO',acc_type)):
-                            rtl_rd_code_tmp = rtl_rd_pat[0]
-                            rtl_rd_code_tmp = rtl_rd_code_tmp.replace("${__REG_VAR__}",cat_str("var",reg_name.lower()))
-                            rtl_rd_code_tmp = rtl_rd_code_tmp.replace("[${__REG_RANGE__}]",bit_range)
-                            rtl_rd_code_tmp = rtl_rd_code_tmp.replace("${__FIELD_NAME__}",field_name)
-                            rtl_rd_code += rtl_rd_code_tmp
-
-                            # generate CSR assign blocks
-                            if(re.match(r'RO',acc_type)):
-                                rtl_asgn_pat = re.findall(r'.*__CSR_ASSIGN_BLK__.*[\r\n]',vcode)
-                                rtl_asgn_str = "assign " + cat_str("var",reg_name.lower()) + bit_range + " = " + port_name + ";" 
-                                rtl_asgn_code = rtl_asgn_pat[0].replace("__CSR_ASSIGN_BLK__",rtl_asgn_str)
-                                sts_assign_blk += rtl_asgn_code
-                rtl_code = rtl_code.replace(rtl_rd_pat[0],rtl_rd_code)
-
-            #find out REG_ADDR, then replace it
-            rtl_code = rtl_code.replace("${__REG_ADDR__}",cat_str("`ADDR",reg_name.upper()))
-            rtl_insert_lists[k] += rtl_code;
-
-        # generate register defines
-        rtl_dclr_pat = re.findall(r'.*__REG_DECLARE_BLK__.*[\r\n]',vcode)
-        rtl_dclr_str  = "reg [" + str(reg_bit_width-1) + ":0] " + cat_str("var",reg_name.lower()) + ";"
-        rtl_dclr_code = rtl_dclr_pat[0].replace("__REG_DECLARE_BLK__",rtl_dclr_str)
-        reg_declare_blk += rtl_dclr_code
-
-    #find out Port lists
-    cfg_port_indexs = wb[wb['Access'].isin(['RW','WO'])].index.values
-    sts_port_indexs = wb[wb['Access'] == 'RO'].index.values
-
-    cfg_port_list = get_port_list(wb,cfg_port_indexs)
-    sts_port_list = get_port_list(wb,sts_port_indexs)
-
-    # generate config port list
-    rtl_port_list_pat = re.findall(r'.*__CSR_PORT_LIST__.*[\r\n]',vcode)
-    rtl_port_dclr_pat = re.findall(r'.*__CSR_PORT_DECLARE__.*[\r\n]',vcode)
-    rtl_port_list_code = ""
-    rtl_port_dclr_code = ""
-    for i in range(0,len(cfg_port_list)):
-        port_dclr_str = "output [" + str(cfg_port_list[i]['msb']) + ":" + str(cfg_port_list[i]['lsb']) + "] " + cfg_port_list[i]['port_name'] + ";";
-        rtl_port_list_code += rtl_port_list_pat[0].replace("__CSR_PORT_LIST__"   ,cfg_port_list[i]['port_name'])
-        rtl_port_dclr_code += rtl_port_dclr_pat[0].replace("__CSR_PORT_DECLARE__",port_dclr_str)
-
-    for i in range(0,len(sts_port_list)):
-        port_dclr_str = "input [" + str(sts_port_list[i]['msb']) + ":" + str(sts_port_list[i]['lsb']) + "] " + sts_port_list[i]['port_name'] + ";";
-        rtl_port_list_code += rtl_port_list_pat[0].replace("__CSR_PORT_LIST__"   ,sts_port_list[i]['port_name'])
-        rtl_port_dclr_code += rtl_port_dclr_pat[0].replace("__CSR_PORT_DECLARE__",port_dclr_str)
-
-    # edit templete file
-    vcode = vcode.replace("${__MODULE_NAME__}"     ,cat_str(dsgn_name.lower(),"csr")  )
-    vcode = vcode.replace("${__DATA_WIDTH_VAL__}"  ,str(data_width)                 ,1)
-    vcode = vcode.replace("${__ADDR_WIDTH_VAL__}"  ,str(addr_width)                 ,1)
-    vcode = vcode.replace("${__STRB_WIDTH_VAL__}"  ,str(int(data_width/8))          ,1)
-    vcode = re.sub(r'.*__REG_DECLARE_BLK__.*[\r\n]',reg_declare_blk,vcode)
-    vcode = re.sub(r'.*__CSR_ASSIGN_BLK__.*[\r\n]', cfg_assign_blk + sts_assign_blk,vcode)
-    vcode = re.sub(r'.*__CSR_PORT_LIST__.*[\r\n]',rtl_port_list_code,vcode)
-    vcode = re.sub(r'.*__CSR_PORT_DECLARE__.*[\r\n]',rtl_port_dclr_code,vcode)
-    for i in range(0,len(reg_loop_patterns)):
-        vcode = vcode.replace(reg_loop_patterns[i],rtl_insert_lists[i])
-
-    # write to CSR.V
-    f_csr_v = open(pf_csr_v,"wt")
-    f_csr_v.write(vcode)
-
-    # close all file
-    f_csr_v.close();
-
-if __name__ == "__main__" :
-    main(sys.argv[1:])
