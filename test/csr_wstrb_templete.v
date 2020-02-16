@@ -69,7 +69,6 @@ module ${__MODULE_NAME__} (
                     end
                     __LOOP_END__
                     default: begin
-                        
                     end
                 endcase
             end
@@ -93,5 +92,5 @@ module ${__MODULE_NAME__} (
     end
 
     //Configuration & Status assign blocks
-    __CSR_ASSIGN_BLK__
+    assign __CSR_ASSIGN_BLK__
 endmodule : ${__MODULE_NAME__}

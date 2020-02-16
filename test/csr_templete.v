@@ -86,5 +86,7 @@ module ${__MODULE_NAME__} (
     end
 
     //Configuration & Status assign blocks
-    __CSR_ASSIGN_BLK__
+    always @(*) begin
+        __CSR_ASSIGN_BLK__
+    end
 endmodule : ${__MODULE_NAME__}
